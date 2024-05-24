@@ -60,10 +60,19 @@
 
 
         }
-    </style>
+        .rule{
+            position: absolute;
+    left: 50%;
+    top: 50%;
+    font-size: 0.8rem;
+    width:fit-content;
+    display: none;
+        }
+</style>
 </head>
 
 <body style="background-color:rgb(40,40,40);color:white"></body>
+    <p style="font-size:8px">修改完配置后，请点击最下方保存键</p>
     <label for="mode-select" class="mode-select-wrap-label">模式：</label>
     <div name="mode-select" class="mode-select-wrap">
 
@@ -81,6 +90,12 @@
 
     <div>
         <label for="code">股票代码：</label>
+        <div class="rule" id="rule">请按照如下规则填写股票代码：<br>
+            如为上海交易所	SH, 则代码为 sSH000001 <br>
+            深圳交易所	SZ	SZ399001 <br>
+            香港交易所	HK	HKHSI <br>
+            美国交易所	US	USDJI <br>
+            </div>
         <input type="text" id="code-single" name="code" value="" />
         <textarea style="display: none;" placeholder="输入代码，一行一个股票" id="code-multiple" name="code" rows="5" cols="33"></textarea>
 
@@ -173,10 +188,8 @@
         
         formData.actionid = actionid
         formData.key = key
-        // formData.append("key", key)
-        // formData.append("actionid", actionid)
         //send to main 
-        // ws.send(JSON.stringify(Object.fromEntries(formData)));
+
         ws.send(JSON.stringify(formData))
     }
 
@@ -204,7 +217,12 @@
         submit()
     })
 
-
+    document.querySelector("#code-single").addEventListener("focus",(e)=>{
+        document.querySelector("#rule").style.display="block"
+    })
+    document.querySelector("#code-single").addEventListener("focusout",(e)=>{
+        document.querySelector("#rule").style.display="none"
+    })
 </script>
 
 </html>

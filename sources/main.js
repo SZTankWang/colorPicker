@@ -37,7 +37,10 @@ let currKey = null; //记录当前正在通信的配置页
 let currParam = null; //用来给当前配置页发送的配置
 let keyWsMapping = new Map();//key -> ws 
 let keyActionMapping = new Map(); //KEY -> ACTIONID
+let actionKeyMapping = new Map() ; //actionid -> key
 let actionParamMapping = new Map() ; //actionid -> param 
+let actionResultMapping = new Map(); //actionid -> stock result list
+let actionTimerMapping = new Map() //actionid -> rotate-timer info {rotateTimer: int, rotateIdx: int,refreshTimer:int}
 let latestWS = null; //最近建立连接的websocket
 //绑定的按键
 const uuid = "com.ulanzi.ulanzideck.stock"
@@ -122,8 +125,8 @@ ws.addEventListener("message", async (event) => {
                     "param": {}
                 }
                 ws.send(JSON.stringify(resp))
-                const image = await run(data.param,actionid)
-                await updateIcon(image,data.key)
+                const image = await run(param,actionid)
+                await updateIcon(image,key)
                 //发送到上位机
                 break
 
@@ -190,6 +193,7 @@ ws.addEventListener("message", async (event) => {
                 console.log("[paramfromplugin]", event.data)
 
         }
+
     }
     catch (e) {
         console.log("error parsing message", e)
@@ -206,7 +210,88 @@ async function run(param,actionid) {
     console.log("invoking run")
     //记录本次的param，用于下次setactive使用
     actionParamMapping.set(actionid,param)
+    //拉新的股票信息
+    if(param.stockCode.includes("\n")){
+        param.stockCode = param.stockCode.split("\n")
+        if(param.stockCode[param.stockCode.length-1]==="") param.stockCode.pop()
 
+    }
+    let result = await getStockInfo(param.stockCode)
+    console.log("查询结果",result)
+    if(param.single){
+        //如果之前该actionid有轮动以及刷新定时定时，清除掉
+        if(actionTimerMapping.get(actionid)){
+            clearInterval(actionTimerMapping.get(actionid).rotateTimer)
+            clearInterval(actionTimerMapping.get(actionid).refreshTimer)
+        }
+        //
+        const image  = drawImage(result,param)
+        
+        //如果设置了定时更新，则创建一个定时器，定时重新拉取数据，更新图标
+        //更新图标
+        let refreshTimer = setInterval(async()=>{
+            console.log("重新拉取数据")
+            //重新拉取数据
+            let result = await getStockInfo(param.stockCode)
+            //重新更新
+            let image = drawImage(result,param)
+            updateIcon(image,actionKeyMapping.get(actionid))
+
+        },getInterval(param.freq))
+
+        actionTimerMapping.set(actionid,{rotateTimer:undefined,rotateIdx:0,refreshTimer:refreshTimer})
+        return image 
+    }
+    else{
+        //按照设置的时间间隔，轮动股票信息
+        actionResultMapping.set(actionid,result)
+        if(actionTimerMapping.get(actionid)){
+            clearInterval(actionTimerMapping.get(actionid).rotateTimer)
+            clearInterval(actionTimerMapping.get(actionid).refreshTimer)
+        }
+        //画图并更新一次
+        const image = drawImage(result[0],param)
+
+        //设置新的轮动定时
+
+        let timer = setInterval(()=>{
+            //定时更新图标
+            console.log(`定时轮动 ${param},${actionid}`)
+            let rotateIdx = actionTimerMapping.get(actionid).rotateIdx
+            const image = drawImage(actionResultMapping.get(actionid)[rotateIdx % (actionResultMapping.get(actionid)).length],param)
+            updateIcon(image,actionKeyMapping.get(actionid))
+            actionTimerMapping.get(actionid).rotateIdx += 1
+        },getInterval(param.rotateDuration))
+        actionTimerMapping.set(actionid,{rotateTimer:timer,rotateIdx:1})
+        return image
+    }
+
+
+}
+
+function getInterval(time){
+    return parseInt(time) * 1000
+}
+
+async function getStockInfo(stockCode){
+    if(typeof stockCode === "string"){
+        return tencent.getStock(stockCode)
+        .then(res=>{
+            return res 
+        })
+        .catch(rej=>{
+            return rej 
+        })
+
+    }
+    else if(stockCode instanceof Array){
+        console.log("股票列表",stockCode)
+        return tencent.getStocks(stockCode)
+        .then(res=>{
+            return res
+        })
+        .catch(rej=>rej)
+    }
 }
 
 function drawImageOnContext(imageUrl,context){
@@ -216,52 +301,29 @@ function drawImageOnContext(imageUrl,context){
 }
 
 function drawImage(data, param) {
-    let offScreenCanvas = createCanvas(256, 256);
+    let w = 256, h=256
+    let offScreenCanvas = createCanvas(w, h);
     let context = offScreenCanvas.getContext("2d");
     //draw image 
-
-    const __filename = fileURLToPath(import.meta.url);
-    const __dir = dirname(__filename).split(sep)
-    __dir.pop()
-    const asset_dir = __dir.concat(["resources","actions","config"]).join(sep)
-    console.log("asset_dir",asset_dir)
-    let imagePromise = undefined;
-        switch(data.weather){
-        case "晴":
-            imagePromise = drawImageOnContext(`${asset_dir}${sep}sun.jpeg`,context)
-            break 
-        case "多云":
-            imagePromise = drawImageOnContext(`${asset_dir}${sep}cloud.jpg`,context)
-            break 
-        case "阴":
-            imagePromise = drawImageOnContext(`${asset_dir}${sep}rain.jpeg`,context)
-            break 
-        default:
-            imagePromise = drawImageOnContext(`${asset_dir}${sep}rain.jpeg`,context)
-            
+    context.fillStyle = param.bgColor;
+    context.fillRect(0,0,w,h)
+    context.font='bold 32px serif'
+    context.fillStyle ='#ffffff'
+    context.fillText(data.name,60,40)
+    context.fillText(data.now,10,100)
+    let trend ;
+    if(data.percent < 0){
+        context.fillStyle = "#2fbe25"
+        trend = "\u{02193}"
     }
-    // context.fillStyle = '#038cfc'; //set fill color
-    // context.fillRect(0, 0, 256, 256);
-    return imagePromise.then(res=>{
-        context.fillStyle = 'black'
-        context.font = '30px serif'
-        drawCityTitle(context, data, param.cityDisplay)
-        context.font = '40px serif'
-        context.fillText(`${getTemp(data, param.round, param.temp)} ° ${data.weather}`, 5, 80)
-        context.font = '30px serif'
-        context.fillText(`湿度`,5,140)
-        context.fillText(data.humidity,150,140)
-        context.fillText('风向',5,180)
-        context.fillText(data.winddirection,150,180)
-        context.fillText('风力',5,220)
-        context.fillText(data.windpower,150,220)
-        const image = offScreenCanvas.toDataURL("image/png")
-        // console.log(image)
-        return image; //return canvas element
-    
-    })
-    // window.location.href=image; // it will save locally
-
+    else{
+        context.fillStyle = "#be3b25"
+        trend = "\u{02191}"
+    }
+    context.fillText(`(${(data.percent*100).toFixed(2)}%)`,10,150)
+    context.fillText(trend,128,200)
+    const image = offScreenCanvas.toDataURL("image/png")
+    return image 
 
 }
 
@@ -273,6 +335,7 @@ function add(key,actionid) {
     keyWsMapping.set(currKey, latestWS)
     //记录与该件绑定的actionid
     keyActionMapping.set(currKey,actionid)
+    actionKeyMapping.set(actionid,key)
 }
 //传递参数给插件
 async function paramfromapp(param, actionid,key) {
@@ -358,49 +421,6 @@ async function updateIcon(data,key) {
     ws.send(JSON.stringify(msg))
 }
 
-//摄氏华氏转换
-function tempConverted(temp, farenheit) {
-    return farenheit === "far" ? temp * 1.8 + 32 : temp
-}
-
-//获取温度
-function getTemp(data, round, farenheit) {
-    if (round === "yes") {
-        return Math.ceil(tempConverted(data.temperature, farenheit))
-    }
-    return tempConverted(data.temperature, farenheit)
-}
-
-function drawCityTitle(context, data, position) {
-    switch (position) {
-        case "hide":
-            break
-        case "topLeft":
-            context.fillText(data.city, 5, 30);
-            break
-        case "topRight":
-            context.fillText(data.city, 160, 30);
-            break
-        case "bottomRight":
-            context.fillText(data.city, 160, 225);
-            break
-        case "bottomLeft":
-            context.fillText(data.city, 0, 225);
-            break
-    }
-}
-
-function getInterval(freq) {
-    switch (freq) {
-        case "ten":
-            //test purpose
-            return 10 * 60 * 1000
-        case "thirty":
-            return 30 * 60 * 1000
-        case "hour":
-            return 60 * 60 * 1000
-    }
-}
 
 //clean up 
 function exitHandler(options, exitCode) {
