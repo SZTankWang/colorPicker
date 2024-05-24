@@ -126,20 +126,30 @@ ws.addEventListener("message", async (event) => {
                 }
                 ws.send(JSON.stringify(resp))
                 const image = await run(param,actionid)
-                await updateIcon(image,key)
+                updateIcon(image,key)
                 //发送到上位机
                 break
 
             case "setactive":
                 if(data.active){
                     add(key,actionid)
-                    //如果之前有执行结果，则要发送这个执行结果
+                    //如果之前有参数记录，则要发送这个执行结果
+                    console.log("存在持久化数据")
                     const prev_param = actionParamMapping.get(actionid)
                     if(prev_param!==undefined){
-
+                        const image = await run(prev_param,actionid)
+                        updateIcon(image,key)
+                    }
+                }
+                else{
+                    //清除所有定时器
+                    if(actionTimerMapping.get(actionid)){
+                        clearInterval(actionTimerMapping.get(actionid).rotateTimer)
+                        clearInterval(actionTimerMapping.get(actionid).refreshTimer)                        
                     }
                 }
 
+                
                 resp = {
                     "code":0,
                     "cmd":"setactive",
@@ -169,7 +179,7 @@ ws.addEventListener("message", async (event) => {
                 //把插件某个功能配置到按键上
                 add(key,actionid)
                 // 持久化数据
-                paramfromapp(data,actionid,data)
+                paramfromapp(param,actionid,data)
 
                 resp = {
                     "code": 0, // 0-"success" or ⾮0-"fail"
@@ -207,7 +217,7 @@ ws.addEventListener("message", async (event) => {
 //run拉取一次新的数据
 async function run(param,actionid) {
     //make request 
-    console.log("invoking run")
+    console.log("[run] on param",param)
     //记录本次的param，用于下次setactive使用
     actionParamMapping.set(actionid,param)
     //拉新的股票信息
@@ -218,6 +228,8 @@ async function run(param,actionid) {
     }
     let result = await getStockInfo(param.stockCode)
     console.log("查询结果",result)
+    if(typeof result === "string" && result.includes("Error")) return 
+    
     if(param.single){
         //如果之前该actionid有轮动以及刷新定时定时，清除掉
         if(actionTimerMapping.get(actionid)){
@@ -251,6 +263,14 @@ async function run(param,actionid) {
         }
         //画图并更新一次
         const image = drawImage(result[0],param)
+        //设置定时更新数据
+        let refreshTimer = setInterval(async ()=>{
+            console.log("重新拉取数据")
+            let result = await getStockInfo(param.stockCode)
+            //存数据
+            actionResultMapping.set(actionid,result)
+            
+        },getInterval(param.freq))
 
         //设置新的轮动定时
 
@@ -262,7 +282,8 @@ async function run(param,actionid) {
             updateIcon(image,actionKeyMapping.get(actionid))
             actionTimerMapping.get(actionid).rotateIdx += 1
         },getInterval(param.rotateDuration))
-        actionTimerMapping.set(actionid,{rotateTimer:timer,rotateIdx:1})
+
+        actionTimerMapping.set(actionid,{rotateTimer:timer,rotateIdx:1,refreshTimer:refreshTimer})
         return image
     }
 
@@ -347,7 +368,8 @@ async function paramfromapp(param, actionid,key) {
         //将会发送给配置页面
         currParam = param
         //如果初次数据就不为空，执行一次
-
+        const image = run(param,actionid)
+        updateIcon(image,key)
     }
     //写入map中
     actionParamMapping.set(actionid,param)
