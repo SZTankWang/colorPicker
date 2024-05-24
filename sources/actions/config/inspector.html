@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        input[type="text"],
+        textarea,
+        select {
+
+            background-color: rgb(63 63 67);
+            color: white;
+            outline: none;
+
+
+        }
+        .button{
+            border-radius:6px;
+            background-color:darkslategrey;
+            color:white;
+            outline:none;
+            border:none;
+            width: 3.5rem;
+    height: 1.4rem;
+            margin-left:10%;
+    }
+        
+        .button:hover{
+            cursor:pointer;
+            animation-duration:0.5s;
+            background-color:dimgrey
+        }
+
+
+        div {
+            margin-top: 1rem;
+        }
+
+        .mode-select {
+            width: fit-content
+        }
+
+        .mode-select-wrap {
+            width: fit-content;
+            display: inline-block;
+            margin: 0;
+            margin-left: 1.7rem;
+        }
+
+        .mode-select-wrap-label {
+            position: relative;
+            bottom: 1rem;
+        }
+
+        textarea{
+            /* text-align: right */
+            white-space: pre-wrap;
+
+
+        }
+    </style>
+</head>
+
+<body style="background-color:rgb(40,40,40);color:white"></body>
+    <label for="mode-select" class="mode-select-wrap-label">模式：</label>
+    <div name="mode-select" class="mode-select-wrap">
+
+        <div class="mode-select">
+            <input type="radio" id="single" name="mode" value="single" checked />
+            <label for="single">单个股票</label>
+        </div>
+
+        <div class="mode-select">
+            <input type="radio" id="multiple" name="mode" value="multiple" />
+            <label for="multiple">多个股票</label>
+        </div>
+
+    </div>
+
+    <div>
+        <label for="code">股票代码：</label>
+        <input type="text" id="code-single" name="code" value="" />
+        <textarea style="display: none;" placeholder="输入代码，一行一个股票" id="code-multiple" name="code" rows="5" cols="33"></textarea>
+
+    </div>
+    <div id="rotate-duration-container" style="display: none;">
+        <label for="rotate-duration">滚动频率：</label>
+        <input id="rotate-duration" name="rotate-duration" type="range" min="0" max="120" step="1" value="60"/>
+        <span id="rotate-duration-marker">60</span>
+    </div>
+    <div>
+        <label for="freq-select">刷新频率：</label>
+
+        <select name="freq-select" id="freq-select">
+            <option value="10">10s </option>
+            <option value="30">30s</option>
+            <option value="60">1min</option>
+            <option value="300">5min</option>
+            <option value="600">10min</option>
+            <option value="900">15min</option>
+            <option value="1800">30min</option>
+            <option value="3600">1h</option>
+            
+        </select>
+    </div>
+    <div>
+        <label for="color">背景颜色：</label>
+        <input type="color" id="color" name="color" value="#000000" />
+              
+    </div>
+    <div>
+        <label for="bgImg">背景图片：</label>
+
+<input type="file" id="bgImg" name="bgImg" accept="image/png, image/jpeg" />
+    </div>
+    <div>
+        <button id="button" class="button">保存</button>
+    </div>
+
+</body>
+<script>
+    const ws = new WebSocket("ws://localhost:3915");
+
+    let initialConfig = null;
+    let key = null;
+    let actionid = null;
+    let singleStock = true 
+
+    // Listen for messages
+    ws.addEventListener("message", function (ev) {
+        const msg = JSON.parse(ev.data)
+        console.log(`主程序发来 ${ev.data}`)
+        initialConfig = msg.param
+        key = msg.key
+        //记录该页面的actionid
+        actionid = msg.actionid
+        setConfig()
+    });
+
+
+    function setConfig() {
+        //初始化，使用上位机的持久化数据
+        if (initialConfig && Object.keys(initialConfig).length) {
+            if(initialConfig.single){
+                document.getElementById("code-single").value = initialConfig.stockCode 
+                document.getElementById("single").click()
+            }
+            else{
+                document.getElementById("code-multiple").value = initialConfig.stockCode
+                document.getElementById("multiple").click()
+                document.getElementById("rotate-duration").value = initialConfig.rotateDuration 
+                document.getElementById("rotate-duration-marker").innerText = initialConfig.rotateDuration
+            }
+            document.getElementById("freq-select").value = initialConfig.freq
+            document.getElementById("color").value = initialConfig.bgColor             
+            document.getElementById("bgImg").value = initialConfig.bgImg
+        }
+    }
+
+    function submit() {
+        const formData = {}
+        formData.single = singleStock
+        formData.stockCode = singleStock ? 
+        document.getElementById("code-single").value
+        : 
+        document.getElementById("code-multiple").value 
+        formData.rotateDuration = document.getElementById("rotate-duration").value
+        formData.freq = document.getElementById("freq-select").value 
+        formData.bgColor = document.getElementById("color").value
+        formData.bgImg = document.getElementById("bgImg").value
+        
+        formData.actionid = actionid
+        formData.key = key
+        // formData.append("key", key)
+        // formData.append("actionid", actionid)
+        //send to main 
+        // ws.send(JSON.stringify(Object.fromEntries(formData)));
+        ws.send(JSON.stringify(formData))
+    }
+
+    document.querySelector("#rotate-duration").addEventListener("input",(e)=>{
+        document.querySelector("#rotate-duration-marker").innerText = e.target.value
+    })
+
+    document.querySelector("#multiple").addEventListener("change",(e)=>{
+        console.log("toggle",e.target.value)
+        singleStock = false 
+        document.getElementById("rotate-duration-container").style.display="block"
+        document.getElementById("code-multiple").style.display="inline-block"
+        document.getElementById("code-single").style.display="none"
+        
+    })
+    document.querySelector("#single").addEventListener("change",(e)=>{
+        console.log("toggle",e.target.value)
+        singleStock = true 
+        document.getElementById("rotate-duration-container").style.display="none"
+        document.getElementById("code-multiple").style.display="none"
+        document.getElementById("code-single").style.display="inline-block"
+    })
+    
+    document.querySelector("#button").addEventListener("click",(e)=>{
+        submit()
+    })
+
+
+</script>
+
+</html>

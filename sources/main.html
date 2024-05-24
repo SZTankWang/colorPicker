@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Plugin</title>
+</head>
+<body>
+    
+</body>
+<script>
+// Weather Plugin Main JS Code 
+//a websocket client that handle connection with 上位机
+
+
+const ws = new WebSocket('ws://127.0.0.1:3906');
+const bc = new BroadcastChannel("weather_channel");
+
+const defaultConfig = {
+    city: "北京",
+    temp: "cel",
+    freq: "push",
+    cityDisplay: "topLeft",
+    round: "no"
+}
+//绑定的按键
+let bindKey = null;
+const uuid = "com.ulanzi.ulanzideck.weather"
+//主程序配置缓存
+let configFromAction = defaultConfig
+
+//更新定时器
+let timer
+
+bc.onmessage = function (ev) {
+    console.log(`[channel]`, ev.data)
+    let msg_ = ev.data
+    //向上位机更新参数
+    updateParam(msg_)
+    //本地缓存参数
+    configFromAction = msg_
+    //检查是否设置了定时更新
+    switch (msg_.freq) {
+        case "push":
+            break
+        default:
+            clearInterval(timer)
+            timer = setInterval(async () => {
+                const image = await run()
+                await updateIcon(image)
+            }, getInterval(msg_.freq))
+
+    }
+}
+
+let resp;
+
+
+const key = "31a6340de048869a69bb2700133ac190"
+
+// Connection opened
+ws.addEventListener("open", (event) => {
+    //发送建立连接消息
+    const hello = {
+        "code": 0, // 0-"success" or ⾮0-"fail"
+        "cmd": "connected", //连接命令
+        "uuid": uuid //插件uuid。同配置⽂件UUID保持⼀致。⽤于区分插件
+    }
+    console.log(`sending ${hello}`)
+    ws.send(JSON.stringify(hello))
+});
+
+// Listen for messages
+ws.addEventListener("message", async (event) => {
+    try {
+        console.log("Message from server ", JSON.parse(event.data));
+        const data = JSON.parse(event.data)
+        const {cmd,uuid ,key} = data
+        switch (cmd) {
+            case "connected":
+                //建立连接
+                resp = {
+                    "code": 0, // 0-"success" or ⾮0-"fail"
+                    "cmd": "connected", //连接命令
+                    "uuid": uuid //插件uuid。同配置⽂件UUID保持⼀致。⽤于区分插件
+                }
+                ws.send(JSON.stringify(resp))
+                break 
+            case "run":
+                //回复
+                resp = {
+                    "code": 0, // 0-"success" or ⾮0-"fail"
+                    "cmd": "run",
+                    "uuid": uuid, //功能uuid
+                    "key": key, //上位机按键key
+                    "param": {}
+                }
+                ws.send(JSON.stringify(resp))
+                const image = await run()
+                await updateIcon(image)
+                //发送到上位机
+                break
+            case 'paramfromapp':
+                //设置从上位机发来的持久化参数
+                const param = data.param
+                paramfromapp(param)
+                //回复
+                resp = {
+                    "cmd": "paramfromapp",
+                    "uuid": uuid, //功能uuid
+                    "key": key, //上位机按键key
+                    "param": {}
+                }
+                ws.send(JSON.stringify(resp))
+                break
+
+            case "add":
+                //把插件某个功能配置到按键上
+                add(data.key)
+                // 持久化数据
+                paramfromapp(data.param)
+
+                resp = {
+                    "code": 0, // 0-"success" or ⾮0-"fail"
+                    "cmd": "add",
+                    "uuid": uuid, //功能uuid
+                    "key": key, //上位机按键key
+                    "param": {}
+                }
+                ws.send(JSON.stringify(resp))
+                break
+            case "init":
+                break
+
+            case "clearall":
+                break
+
+            case "clear":
+                break
+
+        }
+    }
+    catch (e) {
+        console.log("error parsing message", e)
+    }
+
+});
+
+//执行插件功能
+async function run() {
+    //make request 
+    console.log("invoking run")
+    const url = `https://restapi.amap.com/v3/weather/weatherInfo?key=${key}&city=${configFromAction?.city}`
+    const resp = await fetch(url)
+    const json = await resp.json()
+    console.log("result", json)
+    const image = drawImage(json?.lives[0])
+    return image
+}
+
+function drawImage(data) {
+    let offScreenCanvas = document.createElement('canvas');
+    offScreenCanvas.width = '256';
+    offScreenCanvas.height = '256';
+    let context = offScreenCanvas.getContext("2d");
+    context.fillStyle = '#038cfc'; //set fill color
+    context.fillRect(0, 0, 256, 256);
+    context.fillStyle = 'white'
+    context.font = '24px serif'
+    drawCityTitle(context, data, configFromAction.cityDisplay)
+    context.font = '48px serif'
+    context.fillText(`${getTemp(data, configFromAction.round, configFromAction.temp)} C ${data.weather}`, 50, 128)
+    const image = offScreenCanvas.toDataURL("image/png")
+    console.log(image)
+    // window.location.href=image; // it will save locally
+
+    return image; //return canvas element
+
+}
+
+//把插件功能配置到按键上
+function add(key) {
+    bindKey = key
+}
+//传递参数给插件
+function paramfromapp(param) {
+    if (Object.entries(param).length == 0) {
+        bc.postMessage(defaultConfig)
+        return
+    }
+    //同步本地缓存
+    configFromAction = param
+    bc.postMessage(param)
+}
+
+//插件状态初始化
+function init() {
+
+}
+//清理插件的功能配置
+function clearAll() {
+
+}
+//移除单个配置信息
+function clear() {
+
+}
+// 插件->上位机
+//插件更新参数
+function updateParam(param) {
+    const msg = {
+        "cmd": "paramfromplugin",
+        "uuid": uuid, //功能uuid
+        "key": bindKey, //上位机按键key
+        "param": param
+    }
+    ws.send(JSON.stringify(msg))
+}
+
+//插件更新图标
+async function updateIcon(data) {
+    const msg = {
+        "cmd": "state",
+        "param": {//图标状态更换，若⽆则为空
+            "statelist": [
+                {
+                    "uuid": uuid, //功能uuid
+                    "key": bindKey,
+                    "type": 1,
+                    "state": 1, // 图标列表数组编号。请对照manifest.json
+                    "data": data, // ⾃定义图标base64编码数据
+                    "path": "" //本地图⽚⽂件
+                }
+            ]
+        }
+    }
+    ws.send(JSON.stringify(msg))
+}
+
+//摄氏华氏转换
+function tempConverted(temp, farenheit) {
+    return farenheit === "far" ? temp * 1.8 + 32 : temp
+}
+
+//获取温度
+function getTemp(data, round, farenheit) {
+    if (round === "yes") {
+        return Math.ceil(tempConverted(data.temperature, farenheit))
+    }
+    return tempConverted(data.temperature, farenheit)
+}
+
+function drawCityTitle(context, data, position) {
+    switch (position) {
+        case "hide":
+            break
+        case "topLeft":
+            context.fillText(data.city, 0, 24);
+            break
+        case "topRight":
+            context.fillText(data.city, 180, 24);
+            break
+        case "bottomRight":
+            context.fillText(data.city, 180, 225);
+            break
+        case "bottomLeft":
+            context.fillText(data.city, 0, 225);
+            break
+    }
+}
+
+function getInterval(freq) {
+    switch (freq) {
+        case "ten":
+            return 10 * 60 * 1000
+        case "thirty":
+            return 30 * 60 * 1000
+        case "hour":
+            return 60 * 60 * 1000
+    }
+}
+</script>
+</html> 

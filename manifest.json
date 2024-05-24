@@ -1,0 +1,31 @@
+{
+    "Author": "Zhenming Wang",
+    "Name": "Stock",
+    "Description": "Stock Plugin",
+    "Icon": "resources/weather.png",
+    "Version": "0.0.1",
+    "Category": "Custom",
+    "CategoryIcon": "resources/stock.png",
+    "CodePath": "sources/main.js",
+    "Type": "JavaScript",
+    "PrivateAPI": true,
+    "UUID": "com.ulanzi.ulanzideck.stock",
+    "Actions":[
+        {
+            "Name": "ConfigStock",
+            "Icon": "resources/stock.png",
+            "PropertyInspectorPath":"sources/actions/config/inspector.html",
+            "state": 0,
+            "States": [
+            {
+                "Name": "Default",
+                "Image":"resources/stock.png"
+            }
+            ],
+            "Tooltip": "Config Stock Plugin",
+            "UUID": "com.ulanzi.ulanzideck.stock.config"
+        }
+    ],
+    "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
+    "Software": { "MinimumVersion": "5.0" }
+}
