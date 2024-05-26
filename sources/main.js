@@ -61,19 +61,14 @@ server.on('connection', function connection(ws) {
 
     ws.on('error', console.error);
 
-    ws.on('message', function message(data) {
+    ws.on('message', async function message(data) {
         console.log(`页面配置参数`, JSON.parse(data))
         let msg_ = JSON.parse(data)
         //向上位机更新参数
         updateParam(msg_)
-        switch (msg_.freq) {
-
-            case "":
-                break
-            default:
-
-
-        }
+        //运行一次
+        const image = await run(msg_, msg_.actionid)
+        updateIcon(image, msg_.key)
     });
 
 
@@ -136,7 +131,7 @@ ws.addEventListener("message", async (event) => {
                     //如果之前有参数记录，则要发送这个执行结果
                     const prev_param = actionParamMapping.get(actionid)
                     if (prev_param !== undefined) {
-                        console.log("存在持久化数据",prev_param)
+                        console.log("存在持久化数据", prev_param)
                         const image = await run(prev_param, actionid)
                         updateIcon(image, key)
                     }
@@ -179,7 +174,7 @@ ws.addEventListener("message", async (event) => {
                 //把插件某个功能配置到按键上
                 add(key, actionid)
                 // 持久化数据
-                paramfromapp(param, actionid, data)
+                paramfromapp(param, actionid, key)
 
                 resp = {
                     "code": 0, // 0-"success" or ⾮0-"fail"
@@ -199,9 +194,10 @@ ws.addEventListener("message", async (event) => {
 
             case "clear":
                 //清除配置信息，定时器
-                let clearID = param.actionid
+                let clearID = param[0].actionid
                 if (actionTimerMapping.get(clearID)) {
                     const timers = actionTimerMapping.get(clearID)
+                    console.log("待清除：", timers)
                     clearInterval(timers.rotateTimer)
                     clearInterval(timers.refreshTimer)
                 }
@@ -246,7 +242,7 @@ async function run(param, actionid) {
 
     }
     let result = await getStockInfo(param.stockCode)
-    console.log(`查询结果 ${result} 类型 ${Object.prototype.toString.call(result)} `)
+    console.log(`查询结果`,result)
     if (Object.prototype.toString.call(result) === "[object Error]") {
         console.log("参数错误")
         return
@@ -260,6 +256,7 @@ async function run(param, actionid) {
         }
         //
         const image = drawImage(result, param)
+        
 
         //如果设置了定时更新，则创建一个定时器，定时重新拉取数据，更新图标
         //更新图标
@@ -398,11 +395,11 @@ async function paramfromapp(param, actionid, key) {
         //将会发送给配置页面
         currParam = param
         //如果初次数据就不为空，执行一次
-        const image = run(param, actionid)
+        const image = await run(param, actionid)
         updateIcon(image, key)
     }
     //写入map中
-    if(Object.entries(param).length != 0){
+    if (Object.entries(param).length != 0) {
         actionParamMapping.set(actionid, param)
     }
 
