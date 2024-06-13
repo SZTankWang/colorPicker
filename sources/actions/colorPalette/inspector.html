@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        input[type="text"],
+        textarea,
+        select {
+
+            background-color: rgb(63 63 67);
+            color: white;
+            outline: none;
+
+
+        }
+
+        .button {
+            border-radius: 6px;
+            background-color: darkslategrey;
+            color: white;
+            outline: none;
+            border: none;
+            width: 3.5rem;
+            height: 1.4rem;
+            margin-left: 10%;
+        }
+
+        .button:hover {
+            cursor: pointer;
+            animation-duration: 0.5s;
+            background-color: dimgrey
+        }
+
+
+        div {
+            margin-top: 1rem;
+        }
+
+        .mode-select {
+            width: fit-content
+        }
+
+        .mode-select-wrap {
+            width: fit-content;
+            display: inline-block;
+            margin: 0;
+            margin-left: 1.7rem;
+        }
+
+        .mode-select-wrap-label {
+            position: relative;
+            bottom: 1rem;
+        }
+
+        textarea {
+            /* text-align: right */
+            white-space: pre-wrap;
+
+
+        }
+
+        .rule {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            font-size: 0.8rem;
+            width: fit-content;
+            display: none;
+        }
+    </style>
+</head>
+
+<body style="background-color:rgb(40,40,40);color:white"></body>
+<p style="font-size:12px">修改完配置后，请点击最下方保存键</p>
+<p style="font-size:12px">说明：点击保存后，按键所显示的颜色为配置的颜色，按下对应按键，颜色将被复制到剪贴板</p>
+<div>
+    <label for="value">存储值</label>
+
+    <input type="text" name="value" id="value">
+    
+</div>
+
+<div>
+    <label for="paste">按下是否粘贴</label>
+    <input type="checkbox" id="paste" name="paste" />
+
+</div>
+<div>
+    <button id="button" class="button">保存</button>
+</div>
+
+</body>
+<script>
+    const ws = new WebSocket("ws://localhost:3961");
+
+    let initialConfig = null;
+    let key = null;
+    let actionid = null;
+    let uuid = null;
+
+    // Listen for messages
+    ws.addEventListener("message", function (ev) {
+        const msg = JSON.parse(ev.data)
+        console.log(`主程序发来 ${ev.data}`)
+        initialConfig = msg.param
+        key = msg.key
+        //记录该页面的actionid
+        actionid = msg.actionid
+        uuid = msg.uuid
+        setConfig()
+    });
+
+
+    function setConfig() {
+        //初始化，使用上位机的持久化数据
+        if (initialConfig && Object.keys(initialConfig).length) {
+            document.getElementById("value").value = initialConfig.value 
+            document.getElementById("paste").checked = initialConfig.paste
+        }
+    } 
+
+    function submit() {
+        const formData = {}
+        formData.value = document.getElementById("value").value
+        formData.paste = document.getElementById("paste").checked
+        formData.actionid = actionid
+        formData.key = key
+        formData.uuid = uuid
+        //send to main 
+
+        ws.send(JSON.stringify(formData))
+    }
+
+    document.querySelector("#button").addEventListener("click", (e) => {
+        submit()
+    })
+
+
+
+
+</script>
+
+</html>

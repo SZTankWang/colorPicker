@@ -1,29 +1,43 @@
 {
     "Author": "Zhenming Wang",
-    "Name": "Stock",
-    "Description": "Stock Plugin",
+    "Name": "ColorPicker",
+    "Description": "ColorPicker Plugin",
     "Icon": "resources/weather.png",
     "Version": "0.0.1",
     "Category": "Custom",
-    "CategoryIcon": "resources/stock.png",
+    "CategoryIcon": "resources/actions/colorPicker.png",
     "CodePath": "sources/main.js",
     "Type": "JavaScript",
     "PrivateAPI": true,
-    "UUID": "com.ulanzi.ulanzideck.stock",
+    "UUID": "com.ulanzi.ulanzideck.colorPicker",
     "Actions":[
         {
-            "Name": "ConfigStock",
-            "Icon": "resources/stock.png",
-            "PropertyInspectorPath":"sources/actions/config/inspector.html",
+            "Name": "Color Picker",
+            "Icon": "resources/actions/colorPicker.png",
+            "PropertyInspectorPath":"sources/actions/colorPicker/inspector.html",
             "state": 0,
             "States": [
             {
                 "Name": "Default",
-                "Image":"resources/stock.png"
+                "Image":"resources/actions/colorPicker.png"
             }
             ],
-            "Tooltip": "Config Stock Plugin",
-            "UUID": "com.ulanzi.ulanzideck.stock.config"
+            "Tooltip": "Pick color from the screen",
+            "UUID": "com.ulanzi.ulanzideck.colorPicker.picker"
+        },
+        {
+            "Name": "Color Palette",
+            "Icon": "resources/actions/palette.jpg",
+            "PropertyInspectorPath":"sources/actions/colorPalette/inspector.html",
+            "state": 0,
+            "States": [
+            {
+                "Name": "Default",
+                "Image":"resources/actions/palette.jpg"
+            }
+            ],
+            "Tooltip": "Store color code",
+            "UUID": "com.ulanzi.ulanzideck.colorPicker.palette"
         }
     ],
     "OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
